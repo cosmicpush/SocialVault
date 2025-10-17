@@ -12,18 +12,14 @@ import { X, Eye, EyeOff, Copy, GripVertical, Plus, FileText, Search, MoreVertica
 
 // TOTP Timer Component - Memoized
 const TOTPTimer = memo(function TOTPTimer({ secret }) {
-  // Don't attempt to generate a code if no secret is provided
   const [code, setCode] = useState(() =>
     secret ? generate2FACode(secret) : '------'
   )
   const [timeRemaining, setTimeRemaining] = useState(30)
 
   useEffect(() => {
-    // Calculate initial seconds remaining in current period
     const calculateRemainingTime = () => {
       const epoch = Math.floor(Date.now() / 1000)
-      // TOTP tokens typically change every 30 seconds
-      // epoch % 30 gives us how many seconds have passed in the current period
       return 30 - (epoch % 30)
     }
 
@@ -33,7 +29,6 @@ const TOTPTimer = memo(function TOTPTimer({ secret }) {
       const remaining = calculateRemainingTime()
       setTimeRemaining(remaining)
 
-      // When timer resets, regenerate the code (only if we have a secret)
       if (remaining === 30 && secret) {
         setCode(generate2FACode(secret))
       }
@@ -42,56 +37,28 @@ const TOTPTimer = memo(function TOTPTimer({ secret }) {
     return () => clearInterval(interval)
   }, [secret])
 
-  // Calculate progress percentage for the timer
-  const progressPercentage = (timeRemaining / 30) * 100
+  const progressPercentage = Math.max(
+    0,
+    Math.min(100, (timeRemaining / 30) * 100)
+  )
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="font-mono text-lg tracking-widest text-slate-700">
+    <div className="flex min-w-[160px] flex-col items-end gap-1 text-right">
+      <span className="font-mono text-base tracking-[0.4em] text-slate-800">
         {code}
-      </div>
-      <div className="relative flex items-center">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/70 shadow-inner">
-          <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
-            <circle
-              cx="18"
-              cy="18"
-              r="16"
-              fill="none"
-              stroke="rgba(226, 232, 240, 0.6)"
-              strokeWidth="4"
-            />
-            <circle
-              cx="18"
-              cy="18"
-              r="16"
-              fill="none"
-              stroke={
-                timeRemaining <= 5 ? '#f97316' : 'url(#happy-progress-gradient)'
-              }
-              strokeWidth="4"
-              strokeDasharray="100"
-              strokeDashoffset={100 - progressPercentage}
-              className="transition-all duration-1000 ease-linear"
-            />
-            <defs>
-              <linearGradient
-                id="happy-progress-gradient"
-                x1="0%"
-                y1="0%"
-                x2="100%"
-                y2="100%"
-              >
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="50%" stopColor="#ec4899" />
-                <stop offset="100%" stopColor="#f97316" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <span className="absolute text-xs font-semibold text-slate-600">
-            {timeRemaining}
-          </span>
+      </span>
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="h-1.5 w-24 rounded-full bg-slate-200">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${
+              timeRemaining <= 5 ? 'bg-amber-500' : 'bg-emerald-500'
+            }`}
+            style={{ width: `${progressPercentage}%` }}
+          />
         </div>
+        <span className="tabular-nums text-xs text-slate-600">
+          {timeRemaining}s
+        </span>
       </div>
     </div>
   )
@@ -522,6 +489,10 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
   const [currentIndex, setCurrentIndex] = useState(0)
   const currentCandidate = candidates[currentIndex]
   const [moving, setMoving] = useState(false)
+  const [draggedItemId, setDraggedItemId] = useState(null)
+  const [draggedOverId, setDraggedOverId] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [reorderedItems, setReorderedItems] = useState([])
 
   const replaceTokens = useCallback((tagsString, from, to) => {
     const tokens = String(tagsString || '')
@@ -731,12 +702,6 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
     },
     [editingAccount, closeDialog, fetchResources, refreshGroups]
   )
-
-  // Simple drag state
-  const [draggedItemId, setDraggedItemId] = useState(null)
-  const [draggedOverId, setDraggedOverId] = useState(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [reorderedItems, setReorderedItems] = useState([])
 
   // Initialize reordered items with current resources
   useEffect(() => {
@@ -1517,12 +1482,12 @@ export function FacebookAccountManagerContainer() {
           {account.twoFASecret && (
             <div className="flex justify-between items-center">
               <span className="font-medium text-slate-600">2FA Code:</span>
-              <div className="flex items-center gap-2">
-                <TOTPTimer secret={account.twoFASecret} />
-                <button
-                  onClick={() =>
-                    handleCopy(
-                      generate2FACode(account.twoFASecret),
+            <div className="flex items-center gap-3">
+              <TOTPTimer secret={account.twoFASecret} />
+              <button
+                onClick={() =>
+                  handleCopy(
+                    generate2FACode(account.twoFASecret),
                       `2fa-${account.id}`
                     )
                   }
@@ -1543,7 +1508,10 @@ export function FacebookAccountManagerContainer() {
               <span className="font-medium text-slate-600">Tags:</span>
               <div className="flex flex-wrap gap-2 items-center">
                 {account.tags.split(',').map((tag, index) => (
-                  <span key={index} className="happy-tag">
+                  <span
+                    key={index}
+                    className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
+                  >
                     {tag.trim()}
                   </span>
                 ))}

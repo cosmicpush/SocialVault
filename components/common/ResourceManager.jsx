@@ -553,16 +553,21 @@ export const renderField = (label, value, options = {}) => {
 
   return (
     <div
-      className={`flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3 text-sm text-slate-600 ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 ${className}`}
     >
-      <span className="font-semibold text-slate-500">{label}</span>
-      <div className="flex items-center gap-2 text-slate-700">
-        <span className="break-all">{value}</span>
+      <span className="min-w-[140px] text-sm font-medium text-slate-600">
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+        <span className="max-w-full break-all text-sm font-semibold text-slate-800">
+          {value}
+        </span>
         {copyable && (
           <button
+            type="button"
             onClick={() => onCopy(value, fieldId)}
-            className={`happy-button-ghost h-9 w-9 justify-center rounded-full ${
-              copiedField === fieldId ? 'text-emerald-500' : 'text-fuchsia-400'
+            className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100 ${
+              copiedField === fieldId ? 'text-emerald-500' : 'text-slate-500'
             }`}
             title="Copy to clipboard"
           >
@@ -587,14 +592,19 @@ export const renderPasswordField = (label, value, options = {}) => {
 
   return (
     <div
-      className={`flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3 text-sm text-slate-600 ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 ${className}`}
     >
-      <span className="font-semibold text-slate-500">{label}</span>
-      <div className="flex items-center gap-2 text-slate-700">
-        <span className="break-all">{isVisible ? value : '••••••••'}</span>
+      <span className="min-w-[140px] text-sm font-medium text-slate-600">
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+        <span className="max-w-full break-all text-sm font-semibold text-slate-800">
+          {isVisible ? value : '••••••••'}
+        </span>
         <button
+          type="button"
           onClick={onToggleVisibility}
-          className="happy-button-ghost h-9 w-9 justify-center rounded-full text-fuchsia-400"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
           title={isVisible ? 'Hide password' : 'Show password'}
         >
           {isVisible ? (
@@ -604,9 +614,10 @@ export const renderPasswordField = (label, value, options = {}) => {
           )}
         </button>
         <button
+          type="button"
           onClick={() => onCopy(value, fieldId)}
-          className={`happy-button-ghost h-9 w-9 justify-center rounded-full ${
-            copiedField === fieldId ? 'text-emerald-500' : 'text-fuchsia-400'
+          className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100 ${
+            copiedField === fieldId ? 'text-emerald-500' : 'text-slate-500'
           }`}
           title="Copy to clipboard"
         >
@@ -624,23 +635,23 @@ export const renderCustomFields = (customFields, options = {}) => {
   if (!customFields || Object.keys(customFields).length === 0) return null
 
   return (
-    <div className="mt-6 rounded-2xl border border-white/60 bg-white/60 px-4 py-4">
+    <div className="mt-6 rounded-lg border border-slate-200 bg-white px-4 py-4">
       <h4 className="mb-3 text-sm font-semibold text-slate-600">{title}:</h4>
       <div className="space-y-2">
         {Object.entries(customFields).map(([key, value]) => (
           <div
             key={key}
-            className="flex items-center justify-between rounded-2xl px-3 py-2 text-sm text-slate-600"
+            className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
           >
             <span className="font-medium text-slate-500">{key}:</span>
             <div className="flex items-center gap-2 text-slate-700">
               <span className="break-all">{value}</span>
               <button
                 onClick={() => onCopy(value, `custom-${resourceId}-${key}`)}
-                className={`happy-button-ghost h-9 w-9 justify-center rounded-full ${
+                className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100 ${
                   copiedField === `custom-${resourceId}-${key}`
                     ? 'text-emerald-500'
-                    : 'text-fuchsia-400'
+                    : 'text-slate-500'
                 }`}
                 title="Copy to clipboard"
               >
