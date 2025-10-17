@@ -199,6 +199,8 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
   onClose,
   account,
   onSubmit,
+  groups,
+  defaultGroupId,
 }) {
   // Single form data state
   const [formData, setFormData] = useState(() => ({
@@ -214,6 +216,7 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
     showEmailPassword: false,
     currentTagInput: '',
     id: null,
+    groupId: defaultGroupId ?? null,
   }))
 
   // Update form data when account changes
@@ -232,6 +235,7 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
         showEmailPassword: false,
         currentTagInput: '',
         id: account.id,
+        groupId: account.groupId ?? defaultGroupId ?? null,
       })
     } else {
       // Reset form when adding a new account
@@ -248,9 +252,10 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
         showEmailPassword: false,
         currentTagInput: '',
         id: null,
+        groupId: defaultGroupId ?? null,
       })
     }
-  }, [account])
+  }, [account, defaultGroupId])
 
   // Tag suggestions state
   const [tagSuggestions, setTagSuggestions] = useState([])
@@ -329,6 +334,7 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
         twoFASecret: formData.twoFASecret,
         tags: formData.tags,
         dob: formData.dob || null,
+        groupId: formData.groupId,
       }
 
       if (formData.id) {
@@ -362,6 +368,31 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <div>
+              <label className="happy-label">
+                Assign to group <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formData.groupId ?? ''}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    groupId: Number(e.target.value),
+                  }))
+                }
+                className="happy-input"
+                required
+              >
+                <option value="" disabled>
+                  Select a group
+                </option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <FormInput
               label="User ID"
               value={formData.userId}
@@ -456,7 +487,15 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
 })
 
 // Custom Draggable Facebook Accounts List Component
-const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsList() {
+const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsList({
+  groups,
+  activeGroupId,
+  setActiveGroupId,
+  onCreateGroup,
+  onRenameGroup,
+  onDeleteGroup,
+  refreshGroups,
+}) {
   const {
     searchType,
     setSearchType,
@@ -470,6 +509,9 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
     fetchResources,
   } = useResource()
 
+  const [selectedAccountIds, setSelectedAccountIds] = useState([])
+  const [moveTargetGroupId, setMoveTargetGroupId] = useState('')
+
   // Tag Replace UI state and helpers
   const [fromTag, setFromTag] = useState('')
   const [toTag, setToTag] = useState('')
@@ -479,6 +521,7 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
   const [candidates, setCandidates] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const currentCandidate = candidates[currentIndex]
+  const [moving, setMoving] = useState(false)
 
   const replaceTokens = useCallback((tagsString, from, to) => {
     const tokens = String(tagsString || '')
@@ -587,6 +630,63 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
     }
   }, [candidates, currentIndex, fromTag, toTag, replaceTokens, fetchResources])
 
+  const toggleSelectAccount = useCallback((accountId) => {
+    setSelectedAccountIds((prev) =>
+      prev.includes(accountId)
+        ? prev.filter((id) => id !== accountId)
+        : [...prev, accountId]
+    )
+  }, [])
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedAccountIds((prev) => {
+      const visibleIds = reorderedItems.map((account) => account.id)
+      const allSelected = visibleIds.every((id) => prev.includes(id))
+      return allSelected ? [] : visibleIds
+    })
+  }, [reorderedItems])
+
+  const handleMoveSelected = useCallback(async () => {
+    if (!moveTargetGroupId || selectedAccountIds.length === 0) return
+    try {
+      setMoving(true)
+      setMessage('')
+      const res = await fetch('/api/facebook-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'move',
+          accountIds: selectedAccountIds,
+          targetGroupId: Number(moveTargetGroupId),
+        }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload.error || 'Failed to move accounts')
+      }
+      await fetchResources()
+      await refreshGroups()
+      setSelectedAccountIds([])
+      setMoveTargetGroupId('')
+    } catch (error) {
+      console.error(error)
+      setMessage(error.message || 'Failed to move selected accounts.')
+    } finally {
+      setMoving(false)
+    }
+  }, [moveTargetGroupId, selectedAccountIds, fetchResources, refreshGroups])
+
+  const visibleAccountIds = useMemo(
+    () => reorderedItems.map((account) => account.id),
+    [reorderedItems]
+  )
+  const allVisibleSelected = useMemo(() => {
+    if (visibleAccountIds.length === 0) return false
+    return visibleAccountIds.every((id) => selectedAccountIds.includes(id))
+  }, [visibleAccountIds, selectedAccountIds])
+
+  const selectionCount = selectedAccountIds.length
+
   // Dialog state (moved inside ResourceProvider context)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState(null)
@@ -623,12 +723,13 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
         closeDialog()
         // Refresh the resource list to show updated data
         await fetchResources()
+        await refreshGroups()
       } catch (error) {
         console.error('Error saving account:', error)
         alert('Failed to save account')
       }
     },
-    [editingAccount, closeDialog, fetchResources]
+    [editingAccount, closeDialog, fetchResources, refreshGroups]
   )
 
   // Simple drag state
@@ -640,7 +741,17 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
   // Initialize reordered items with current resources
   useEffect(() => {
     setReorderedItems(filteredAndSortedResources)
+    setSelectedAccountIds((prev) =>
+      prev.filter((id) =>
+        filteredAndSortedResources.some((account) => account.id === id)
+      )
+    )
   }, [filteredAndSortedResources])
+
+  useEffect(() => {
+    setSelectedAccountIds([])
+    setMoveTargetGroupId('')
+  }, [activeGroupId])
 
   // Handle drag start
   const handleDragStart = useCallback((e, account) => {
@@ -705,7 +816,8 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
         },
         body: JSON.stringify({
           action: 'reorder',
-          accounts: reorderedItems.map(acc => ({ id: acc.id }))
+          accounts: reorderedItems.map(acc => ({ id: acc.id })),
+          groupId: activeGroupId,
         }),
       })
 
@@ -715,6 +827,7 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
 
       // Fetch fresh data from server to ensure proper order
       await fetchResources()
+      await refreshGroups()
     } catch (error) {
       console.error('Error reordering accounts:', error)
       // Revert to original order on error
@@ -725,7 +838,7 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
     setDraggedItemId(null)
     setDraggedOverId(null)
     setIsDragging(false)
-  }, [draggedItemId, reorderedItems, config.apiEndpoint, fetchResources, filteredAndSortedResources])
+  }, [draggedItemId, reorderedItems, config.apiEndpoint, fetchResources, filteredAndSortedResources, activeGroupId, refreshGroups])
 
   // Handle drag end - cleanup
   const handleDragEnd = useCallback(() => {
@@ -752,6 +865,105 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
 
   return (
     <div className="space-y-10">
+      <div className="happy-card space-y-4 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-700">Groups</h3>
+            <p className="text-sm text-slate-500">
+              Organize accounts into friendly vault clusters.
+            </p>
+          </div>
+          <button
+            onClick={onCreateGroup}
+            className="happy-button-secondary"
+          >
+            + New group
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {groups.map((group) => {
+            const isActive = group.id === activeGroupId
+            return (
+              <div
+                key={group.id}
+                className={`flex items-center gap-3 rounded-full border border-white/60 bg-white/80 px-4 py-2 shadow-sm transition-all ${
+                  isActive ? 'ring-2 ring-fuchsia-300 shadow-md' : ''
+                }`}
+              >
+                <button
+                  onClick={() => setActiveGroupId(group.id)}
+                  className={`text-sm font-semibold ${
+                    isActive ? 'text-fuchsia-600' : 'text-slate-600'
+                  }`}
+                >
+                  {group.name}
+                </button>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                  {group.accountCount}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onRenameGroup(group)}
+                    className="happy-button-ghost text-xs"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => onDeleteGroup(group)}
+                    disabled={group.accountCount > 0}
+                    className="happy-button-ghost text-xs disabled:opacity-40"
+                    title={
+                      group.accountCount > 0
+                        ? 'Move accounts out before deleting'
+                        : 'Delete group'
+                    }
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {selectionCount > 0 && (
+        <div className="happy-card flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm font-semibold text-slate-600">
+            {selectionCount} account{selectionCount === 1 ? '' : 's'} selected
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={moveTargetGroupId}
+              onChange={(e) => setMoveTargetGroupId(e.target.value)}
+              className="happy-input"
+            >
+              <option value="">Select destination group</option>
+              {groups
+                .filter((group) => group.id !== activeGroupId)
+                .map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+            </select>
+            <button
+              onClick={handleMoveSelected}
+              disabled={!moveTargetGroupId || moving}
+              className="happy-button-primary disabled:opacity-50"
+            >
+              {moving ? 'Moving...' : 'Move to group'}
+            </button>
+            <button
+              onClick={() => setSelectedAccountIds([])}
+              className="happy-button-ghost"
+            >
+              Clear selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tag Replace Bar */}
       <div className="happy-card p-6">
         <div className="flex flex-col gap-5 md:flex-row md:items-end">
@@ -906,6 +1118,16 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-400" />
           </div>
         </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleToggleSelectAll}
+            className="happy-button-secondary"
+            disabled={reorderedItems.length === 0}
+          >
+            {allVisibleSelected ? 'Deselect all' : 'Select all'}
+          </button>
+        </div>
       </div>
 
       {/* Error State */}
@@ -951,6 +1173,8 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
             onDrop={handleDrop}
             onDragEnd={handleDragEnd}
             onEdit={(account) => openDialog(account)}
+            isSelected={selectedAccountIds.includes(account.id)}
+            onToggleSelect={toggleSelectAccount}
           />
         ))}
       </div>
@@ -961,6 +1185,8 @@ const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsLis
         onClose={closeDialog}
         account={editingAccount}
         onSubmit={handleSubmit}
+        groups={groups}
+        defaultGroupId={activeGroupId}
       />
     </div>
   )
@@ -977,7 +1203,9 @@ const DraggableAccountCard = memo(function DraggableAccountCard({
   onDragLeave,
   onDrop,
   onDragEnd,
-  onEdit
+  onEdit,
+  isSelected,
+  onToggleSelect,
 }) {
   const {
     openMenuId,
@@ -1012,38 +1240,48 @@ const DraggableAccountCard = memo(function DraggableAccountCard({
       </div>
 
       {/* Resource Menu */}
-      <div className="absolute right-4 top-4 z-10">
-        <button
-          onClick={() =>
-            setOpenMenuId(openMenuId === account.id ? null : account.id)
-          }
-          className="happy-button-ghost"
-        >
-          <MoreVertical className="h-4 w-4 text-slate-500" />
-        </button>
-
-        {openMenuId === account.id && (
-          <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/60 bg-white/90 p-2 shadow-xl backdrop-blur-xl">
-            <button
-              onClick={() => onEdit(account)}
-              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-fuchsia-50"
-            >
-              <Edit className="h-4 w-4 text-fuchsia-500" /> Edit {config.resourceName}
-            </button>
-            <button
-              onClick={() => handleExportResource(account)}
-              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-emerald-50"
-            >
-              <FileText className="h-4 w-4 text-emerald-500" /> Export {config.resourceName}
-            </button>
-            <button
-              onClick={() => handleDelete(account.id)}
-              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50"
-            >
-              <Trash className="h-4 w-4 text-rose-500" /> Delete {config.resourceName}
-            </button>
-          </div>
-        )}
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <label className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-fuchsia-500 focus:ring-fuchsia-200"
+            checked={isSelected}
+            onChange={() => onToggleSelect(account.id)}
+          />
+          <span>Select</span>
+        </label>
+        <div className="relative">
+          <button
+            onClick={() =>
+              setOpenMenuId(openMenuId === account.id ? null : account.id)
+            }
+            className="happy-button-ghost"
+          >
+            <MoreVertical className="h-4 w-4 text-slate-500" />
+          </button>
+          {openMenuId === account.id && (
+            <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/60 bg-white/90 p-2 shadow-xl backdrop-blur-xl">
+              <button
+                onClick={() => onEdit(account)}
+                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-fuchsia-50"
+              >
+                <Edit className="h-4 w-4 text-fuchsia-500" /> Edit {config.resourceName}
+              </button>
+              <button
+                onClick={() => handleExportResource(account)}
+                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-emerald-50"
+              >
+                <FileText className="h-4 w-4 text-emerald-500" /> Export {config.resourceName}
+              </button>
+              <button
+                onClick={() => handleDelete(account.id)}
+                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50"
+              >
+                <Trash className="h-4 w-4 text-rose-500" /> Delete {config.resourceName}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="px-6 pb-6 pt-8 md:pl-16">
@@ -1062,8 +1300,118 @@ const DraggableAccountCard = memo(function DraggableAccountCard({
 })
 
 export function FacebookAccountManagerContainer() {
+  const [groups, setGroups] = useState([])
+  const [activeGroupId, setActiveGroupId] = useState(null)
+  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [groupError, setGroupError] = useState('')
 
-  // Resource configuration for provider
+  const fetchGroups = useCallback(async () => {
+    try {
+      setLoadingGroups(true)
+      const res = await fetch('/api/facebook-groups')
+      if (!res.ok) throw new Error('Failed to load groups')
+      const data = await res.json()
+      setGroups(data)
+      setGroupError('')
+    } catch (error) {
+      console.error(error)
+      setGroupError('Unable to load groups. Please try again.')
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchGroups()
+  }, [fetchGroups])
+
+  useEffect(() => {
+    if (!groups.length) {
+      setActiveGroupId(null)
+      return
+    }
+    if (!activeGroupId || !groups.some((group) => group.id === activeGroupId)) {
+      setActiveGroupId(groups[0].id)
+    }
+  }, [groups, activeGroupId])
+
+  const handleCreateGroup = useCallback(async () => {
+    const name = window.prompt('Name your new group:')
+    if (!name) return
+    const trimmed = name.trim()
+    if (!trimmed) return
+    try {
+      const res = await fetch('/api/facebook-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload.error || 'Failed to create group')
+      }
+      const created = await res.json()
+      await fetchGroups()
+      setActiveGroupId(created.id)
+    } catch (error) {
+      console.error(error)
+      alert(error.message || 'Failed to create group')
+    }
+  }, [fetchGroups])
+
+  const handleRenameGroup = useCallback(
+    async (group) => {
+      const name = window.prompt('Rename group:', group.name)
+      if (!name || name.trim() === group.name) return
+      try {
+        const res = await fetch('/api/facebook-groups', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: group.id, name: name.trim() }),
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}))
+          throw new Error(payload.error || 'Failed to rename group')
+        }
+        await fetchGroups()
+      } catch (error) {
+        console.error(error)
+        alert(error.message || 'Failed to rename group')
+      }
+    },
+    [fetchGroups]
+  )
+
+  const handleDeleteGroup = useCallback(
+    async (group) => {
+      if (group.accountCount > 0) {
+        alert('Move or delete accounts in this group before deleting it.')
+        return
+      }
+      const confirmed = window.confirm(
+        `Delete group "${group.name}"? This cannot be undone.`
+      )
+      if (!confirmed) return
+      try {
+        setActiveGroupId((prev) => (prev === group.id ? null : prev))
+        const res = await fetch('/api/facebook-groups', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: group.id }),
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}))
+          throw new Error(payload.error || 'Failed to delete group')
+        }
+        await fetchGroups()
+      } catch (error) {
+        console.error(error)
+        alert(error.message || 'Failed to delete group')
+      }
+    },
+    [fetchGroups]
+  )
+
   const resourceConfig = useMemo(
     () => ({
       apiEndpoint: '/api/facebook-accounts',
@@ -1076,172 +1424,191 @@ export function FacebookAccountManagerContainer() {
         { value: 'tags', label: 'Tags' },
         { value: 'password', label: 'Password' },
       ],
-      requiredFields: ['userId', 'password'], // twoFASecret no longer required
-
-      // Custom function to get the search field value based on the search type
+      requiredFields: ['userId', 'password'],
       getSearchField: (account, searchType) => {
-        if (searchType === 'email') {
-          return String(account.email || '')
-        } else if (searchType === 'password') {
-          return String(account.password || '')
-        } else if (searchType === 'tags') {
-          return String(account.tags || '')
-        } else {
-          return String(account.userId || '')
-        }
+        if (searchType === 'email') return String(account.email || '')
+        if (searchType === 'password') return String(account.password || '')
+        if (searchType === 'tags') return String(account.tags || '')
+        return String(account.userId || '')
       },
-
-      // Custom search logic for flexible tag matching
       customFilter: (account, searchTerm, searchType) => {
+        if (!activeGroupId || account.groupId !== activeGroupId) {
+          return false
+        }
+
         if (searchType === 'tags' && searchTerm.trim()) {
           const accountTags = (account.tags || '').toLowerCase()
-          const searchTerms = searchTerm.toLowerCase()
+          const searchTerms = searchTerm
+            .toLowerCase()
             .split(',')
-            .map(term => term.trim())
-            .filter(term => term.length > 0)
+            .map((term) => term.trim())
+            .filter((term) => term.length > 0)
 
-          // Check if ALL search terms are present in the account tags (in any order)
-          return searchTerms.every(searchTag => 
+          return searchTerms.every((searchTag) =>
             accountTags.includes(searchTag)
           )
         }
-        
-        // For non-tag searches, use the default logic
-        const searchField = searchType === 'email'
-          ? account.email || ''
-          : searchType === 'password'
-            ? account.password || ''
-            : searchType === 'tags'
-              ? account.tags || ''
-              : account.userId || ''
 
-        return String(searchField).toLowerCase().includes(searchTerm.toLowerCase())
+        const searchField =
+          searchType === 'email'
+            ? account.email || ''
+            : searchType === 'password'
+              ? account.password || ''
+              : searchType === 'tags'
+                ? account.tags || ''
+                : account.userId || ''
+
+        return String(searchField)
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())
       },
-
-
-      // Generate export filename
+      sortResources: (resources) =>
+        [...resources].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
       getExportFilename: (account) => {
         const safeUserId = (account.userId?.toString() || 'account')
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
         return `facebook-account-${safeUserId}.txt`
       },
-
-      // Render the content of each resource card
       renderResourceContent: (
         account,
         { hiddenFields, toggleFieldVisibility, handleCopy, copiedField }
-      ) => {
-        return (
-          <>
-            {/* User ID */}
-            {renderField('User ID:', account.userId, {
+      ) => (
+        <>
+          {renderField('User ID:', account.userId, {
+            copyable: true,
+            onCopy: handleCopy,
+            fieldId: `userid-${account.id}`,
+            copiedField,
+          })}
+          {renderPasswordField('Password:', account.password, {
+            isVisible: hiddenFields[`${account.id}-password`],
+            onToggleVisibility: () =>
+              toggleFieldVisibility(account.id, 'password'),
+            onCopy: handleCopy,
+            fieldId: `password-${account.id}`,
+            copiedField,
+          })}
+          {account.email &&
+            renderField('Email:', account.email, {
               copyable: true,
               onCopy: handleCopy,
-              fieldId: `userid-${account.id}`,
+              fieldId: `email-${account.id}`,
               copiedField,
+              className: 'break-all',
             })}
-
-            {/* Password */}
-            {renderPasswordField('Password:', account.password, {
-              isVisible: hiddenFields[`${account.id}-password`],
+          {account.emailPassword &&
+            renderPasswordField('Email Password:', account.emailPassword, {
+              isVisible: hiddenFields[`${account.id}-emailPassword`],
               onToggleVisibility: () =>
-                toggleFieldVisibility(account.id, 'password'),
+                toggleFieldVisibility(account.id, 'emailPassword'),
               onCopy: handleCopy,
-              fieldId: `password-${account.id}`,
+              fieldId: `emailpass-${account.id}`,
               copiedField,
             })}
-
-            {/* Email */}
-            {account.email &&
-              renderField('Email:', account.email, {
-                copyable: true,
-                onCopy: handleCopy,
-                fieldId: `email-${account.id}`,
-                copiedField,
-                className: 'break-all',
-              })}
-
-            {/* Email Password */}
-            {account.emailPassword &&
-              renderPasswordField('Email Password:', account.emailPassword, {
-                isVisible: hiddenFields[`${account.id}-emailPassword`],
-                onToggleVisibility: () =>
-                  toggleFieldVisibility(account.id, 'emailPassword'),
-                onCopy: handleCopy,
-                fieldId: `emailpass-${account.id}`,
-                copiedField,
-              })}
-
-            {/* Recovery Email */}
-            {account.recoveryEmail &&
-              renderField('Recovery Email:', account.recoveryEmail, {
-                copyable: true,
-                onCopy: handleCopy,
-                fieldId: `recoveryemail-${account.id}`,
-                copiedField,
-                className: 'break-all',
-              })}
-
-            {/* 2FA Code with Timer - only show if there's a 2FA secret */}
-            {account.twoFASecret && (
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-600">2FA Code:</span>
-                <div className="flex items-center gap-2">
-                  <TOTPTimer secret={account.twoFASecret} />
-                  <button
-                    onClick={() =>
-                      handleCopy(
-                        generate2FACode(account.twoFASecret),
-                        `2fa-${account.id}`
-                      )
-                    }
-                    className={`happy-button-ghost h-10 w-10 justify-center rounded-full ${
-                      copiedField === `2fa-${account.id}`
-                        ? 'text-emerald-500'
-                        : 'text-fuchsia-400'
-                    }`}
-                    title="Copy to clipboard"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </button>
-                </div>
+          {account.recoveryEmail &&
+            renderField('Recovery Email:', account.recoveryEmail, {
+              copyable: true,
+              onCopy: handleCopy,
+              fieldId: `recoveryemail-${account.id}`,
+              copiedField,
+              className: 'break-all',
+            })}
+          {account.twoFASecret && (
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-600">2FA Code:</span>
+              <div className="flex items-center gap-2">
+                <TOTPTimer secret={account.twoFASecret} />
+                <button
+                  onClick={() =>
+                    handleCopy(
+                      generate2FACode(account.twoFASecret),
+                      `2fa-${account.id}`
+                    )
+                  }
+                  className={`happy-button-ghost h-10 w-10 justify-center rounded-full ${
+                    copiedField === `2fa-${account.id}`
+                      ? 'text-emerald-500'
+                      : 'text-fuchsia-400'
+                  }`}
+                  title="Copy to clipboard"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
               </div>
-            )}
-
-            {/* Tags */}
-            {account.tags && account.tags.trim() !== '' && (
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-600">Tags:</span>
-                <div className="flex flex-wrap gap-2 items-center">
-                  {account.tags.split(',').map((tag, index) => (
-                    <span
-                      key={index}
-                      className="happy-tag"
-                    >
-                      {tag.trim()}
-                    </span>
-                  ))}
-                </div>
+            </div>
+          )}
+          {account.tags && account.tags.trim() !== '' && (
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-slate-600">Tags:</span>
+              <div className="flex flex-wrap gap-2 items-center">
+                {account.tags.split(',').map((tag, index) => (
+                  <span key={index} className="happy-tag">
+                    {tag.trim()}
+                  </span>
+                ))}
               </div>
+            </div>
+          )}
+          {account.dob &&
+            renderField(
+              'Date of Birth:',
+              new Date(account.dob).toLocaleDateString()
             )}
-
-            {/* Date of Birth */}
-            {account.dob &&
-              renderField(
-                'Date of Birth:',
-                new Date(account.dob).toLocaleDateString()
-              )}
-          </>
-        )
-      },
+        </>
+      ),
     }),
-    []
+    [activeGroupId]
   )
+
+  if (loadingGroups) {
+    return (
+      <div className="happy-card mx-auto max-w-md px-8 py-10 text-center">
+        <p className="text-sm font-semibold text-slate-600">
+          Loading groups...
+        </p>
+      </div>
+    )
+  }
+
+  if (groupError) {
+    return (
+      <div className="happy-card mx-auto max-w-md space-y-4 px-8 py-10 text-center text-rose-600">
+        <p className="font-semibold">{groupError}</p>
+        <button onClick={fetchGroups} className="happy-button-primary">
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (!groups.length) {
+    return (
+      <div className="happy-card mx-auto max-w-xl space-y-4 px-10 py-12 text-center">
+        <h2 className="text-2xl font-semibold text-slate-700">
+          No groups yet
+        </h2>
+        <p className="text-sm text-slate-500">
+          Create your first group to start organizing Facebook accounts.
+        </p>
+        <button onClick={handleCreateGroup} className="happy-button-primary">
+          Create group
+        </button>
+      </div>
+    )
+  }
 
   return (
     <ResourceProvider config={resourceConfig}>
-      <DraggableFacebookAccountsList />
+      <DraggableFacebookAccountsList
+        groups={groups}
+        activeGroupId={activeGroupId}
+        setActiveGroupId={setActiveGroupId}
+        onCreateGroup={handleCreateGroup}
+        onRenameGroup={handleRenameGroup}
+        onDeleteGroup={handleDeleteGroup}
+        refreshGroups={fetchGroups}
+      />
     </ResourceProvider>
   )
 }

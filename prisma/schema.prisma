@@ -30,9 +30,19 @@ model FacebookAccount {
   tags          String   @default("")
   dob           String?  // Add this new field
   order         Int      @default(0) // Add order field for drag and drop
+  groupId       Int?
+  group         FacebookGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
+model FacebookGroup {
+  id        Int                @id @default(autoincrement())
+  name      String             @unique
+  order     Int                @default(0)
+  accounts  FacebookAccount[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
 
 

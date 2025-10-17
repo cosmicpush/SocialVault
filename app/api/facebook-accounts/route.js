@@ -33,6 +33,8 @@ export async function GET(req) {
   try {
     const url = new URL(req.url)
     const getTags = url.searchParams.get('getTags')
+    const groupIdParam = url.searchParams.get('groupId')
+    const groupIdFilter = groupIdParam ? Number(groupIdParam) : null
 
     if (getTags === 'true') {
       const tags = await getUniqueTags()
@@ -43,6 +45,7 @@ export async function GET(req) {
 
     console.log('Fetching Facebook accounts...')
     const accounts = await prisma.facebookAccount.findMany({
+      where: groupIdFilter ? { groupId: groupIdFilter } : undefined,
       orderBy: { order: 'asc' }
     })
     console.log(`Successfully fetched ${accounts.length} accounts`)
@@ -69,8 +72,8 @@ export async function POST(req) {
     
     // Handle reorder request
     if (data.action === 'reorder') {
-      const { accounts } = data
-      
+      const { accounts, groupId } = data
+
       // Update the order for each account
       const updatePromises = accounts.map((account, index) =>
         prisma.facebookAccount.update({
@@ -78,30 +81,85 @@ export async function POST(req) {
           data: { order: index }
         })
       )
-      
+
       await Promise.all(updatePromises)
-      
+
       // Return the updated accounts in the new order
       const updatedAccounts = await prisma.facebookAccount.findMany({
+        where: groupId ? { groupId: Number(groupId) } : undefined,
         orderBy: { order: 'asc' }
       })
-      
+
       const decryptedAccounts = updatedAccounts.map(account =>
         decryptFacebookAccount(account)
       )
-      
+
       return NextResponse.json(decryptedAccounts)
     }
-    
+
+    if (data.action === 'move') {
+      const { accountIds = [], targetGroupId } = data
+
+      if (!Array.isArray(accountIds) || accountIds.length === 0 || !targetGroupId) {
+        return NextResponse.json(
+          { error: 'Invalid move payload' },
+          { status: 400 }
+        )
+      }
+
+      const maxOrder = await prisma.facebookAccount.findFirst({
+        where: { groupId: Number(targetGroupId) },
+        orderBy: { order: 'desc' },
+      })
+
+      let nextOrder = (maxOrder?.order ?? -1) + 1
+
+      for (const id of accountIds) {
+        await prisma.facebookAccount.update({
+          where: { id: Number(id) },
+          data: {
+            groupId: Number(targetGroupId),
+            order: nextOrder++,
+          },
+        })
+      }
+
+      const updatedAccounts = await prisma.facebookAccount.findMany({
+        orderBy: { order: 'asc' },
+      })
+
+      return NextResponse.json(
+        updatedAccounts.map((account) => decryptFacebookAccount(account))
+      )
+    }
+
     // Regular account creation
     const encryptedData = encryptFacebookAccount(data)
-    
+
+    let groupId = data.groupId ? Number(data.groupId) : null
+    if (!groupId) {
+      const fallbackGroup = await prisma.facebookGroup.findFirst({
+        orderBy: { order: 'asc' },
+      })
+      groupId = fallbackGroup?.id ?? null
+    }
+
+    if (!groupId) {
+      return NextResponse.json(
+        { error: 'No groups available. Create a group first.' },
+        { status: 400 }
+      )
+    }
+
     // Get the highest order value to append new account at the end
     const maxOrderAccount = await prisma.facebookAccount.findFirst({
+      where: {
+        groupId,
+      },
       orderBy: { order: 'desc' }
     })
     const nextOrder = (maxOrderAccount?.order ?? -1) + 1
-    
+
     const account = await prisma.facebookAccount.create({
       data: {
         userId: encryptedData.userId,
@@ -113,6 +171,7 @@ export async function POST(req) {
         tags: encryptedData.tags || '',
         dob: data.dob || null,
         order: nextOrder,
+        group: { connect: { id: groupId } },
       },
     })
     return NextResponse.json(decryptFacebookAccount(account))
@@ -141,6 +200,9 @@ export async function PUT(req) {
         tags: encryptedData.tags || '',
         dob: data.dob || null,
         // Don't update order here, only via reorder action
+        group: data.groupId
+          ? { connect: { id: Number(data.groupId) } }
+          : { disconnect: true },
       },
     })
     return NextResponse.json(decryptFacebookAccount(account))

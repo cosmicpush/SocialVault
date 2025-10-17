@@ -59,6 +59,7 @@ export function encryptFacebookAccount(account) {
       twoFASecret: account.twoFASecret ? encrypt(account.twoFASecret) : null,
       tags: account.tags ? encrypt(String(account.tags)) : '',
       dob: account.dob || null, // Store DOB as is, since it's a date
+      groupId: account.groupId ?? null,
     }
   } catch (error) {
     console.error('Error encrypting account:', error)
@@ -83,6 +84,7 @@ export function decryptFacebookAccount(account) {
       twoFASecret: account.twoFASecret ? decrypt(account.twoFASecret) : null,
       tags: account.tags ? decrypt(String(account.tags)) : '',
       dob: account.dob || null, // Return DOB as is
+      groupId: account.groupId ?? null,
     }
   } catch (error) {
     console.error('Error decrypting account:', error)

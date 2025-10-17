@@ -1,0 +1,43 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: SSH Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
+        run: |
+          ssh "${SSH_USERNAME}@${SSH_HOST}" <<'EOF'
+            set -euo pipefail
+            cd "${REMOTE_PATH}"
+            git pull
+            npm run clean
+            npm install --no-progress --prefer-offline
+            npx prisma db push
+            npm run build
+            pm2 reload bharatiyanews
+EOF
