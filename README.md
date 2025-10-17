@@ -45,7 +45,7 @@ A secure, streamlined web application for managing Facebook account credentials 
 
 1. Clone and navigate:
 ```bash
-git clone https://github.com/socialvault/socialvault.git
+git clone https://github.com/cosmicpush/socialvault.git
 cd socialvault
 ```
 
@@ -94,7 +94,7 @@ npm run dev
 ```bash
 mkdir -p /var/www/bharatiyanews.com
 cd /var/www/bharatiyanews.com
-git clone https://github.com/socialvault/socialvault.git .
+git clone https://github.com/cosmicpush/socialvault.git .
 ```
 
 2. Initial setup:
