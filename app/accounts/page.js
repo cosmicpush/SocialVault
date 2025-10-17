@@ -53,7 +53,7 @@ export default function AccountsPage() {
           Choose the vault you want to open today
         </h1>
         <p className="mt-4 text-lg text-slate-600 md:text-xl">
-          Facebook is live and humming. Instagram, Threads, Gmail, and more are
+          Facebook is live and humming. Instagram, Gmail, Microsoft Outlook and more are
           lining up for a playful launch soon.
         </p>
       </section>
