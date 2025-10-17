@@ -2,8 +2,6 @@
 
 A secure, streamlined web application for managing Facebook account credentials with advanced security features. Built with Next.js 14 and Prisma.
 
-> Currently deployed at: bharatiyanews.com
-
 ## 🌟 Features
 
 ### Facebook Account Management
