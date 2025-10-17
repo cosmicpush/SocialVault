@@ -1,0 +1,1249 @@
+'use client'
+
+import { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react'
+import {
+  ResourceProvider,
+  renderField,
+  renderPasswordField,
+  useResource,
+} from './common/ResourceManager'
+import { generate2FACode } from '@/utils/2fa'
+import { X, Eye, EyeOff, Copy, GripVertical, Plus, FileText, Search, MoreVertical, Edit, Trash } from 'lucide-react'
+
+// TOTP Timer Component - Memoized
+const TOTPTimer = memo(function TOTPTimer({ secret }) {
+  // Don't attempt to generate a code if no secret is provided
+  const [code, setCode] = useState(() =>
+    secret ? generate2FACode(secret) : '------'
+  )
+  const [timeRemaining, setTimeRemaining] = useState(30)
+
+  useEffect(() => {
+    // Calculate initial seconds remaining in current period
+    const calculateRemainingTime = () => {
+      const epoch = Math.floor(Date.now() / 1000)
+      // TOTP tokens typically change every 30 seconds
+      // epoch % 30 gives us how many seconds have passed in the current period
+      return 30 - (epoch % 30)
+    }
+
+    setTimeRemaining(calculateRemainingTime())
+
+    const interval = setInterval(() => {
+      const remaining = calculateRemainingTime()
+      setTimeRemaining(remaining)
+
+      // When timer resets, regenerate the code (only if we have a secret)
+      if (remaining === 30 && secret) {
+        setCode(generate2FACode(secret))
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [secret])
+
+  // Calculate progress percentage for the timer
+  const progressPercentage = (timeRemaining / 30) * 100
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="font-mono text-lg tracking-widest text-slate-700">
+        {code}
+      </div>
+      <div className="relative flex items-center">
+        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/70 shadow-inner">
+          <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+            <circle
+              cx="18"
+              cy="18"
+              r="16"
+              fill="none"
+              stroke="rgba(226, 232, 240, 0.6)"
+              strokeWidth="4"
+            />
+            <circle
+              cx="18"
+              cy="18"
+              r="16"
+              fill="none"
+              stroke={
+                timeRemaining <= 5 ? '#f97316' : 'url(#happy-progress-gradient)'
+              }
+              strokeWidth="4"
+              strokeDasharray="100"
+              strokeDashoffset={100 - progressPercentage}
+              className="transition-all duration-1000 ease-linear"
+            />
+            <defs>
+              <linearGradient
+                id="happy-progress-gradient"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="50%" stopColor="#ec4899" />
+                <stop offset="100%" stopColor="#f97316" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <span className="absolute text-xs font-semibold text-slate-600">
+            {timeRemaining}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+// Memoized Form Input Component
+const FormInput = memo(function FormInput({
+  label,
+  value,
+  onChange,
+  required = false,
+  type = 'text',
+  ...props
+}) {
+  return (
+    <div>
+      <label className="happy-label">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      <input
+        required={required}
+        type={type}
+        value={value}
+        onChange={onChange}
+        className="happy-input"
+        {...props}
+      />
+    </div>
+  )
+})
+
+// Memoized Password Input Component
+const PasswordInput = memo(function PasswordInput({
+  label,
+  value,
+  onChange,
+  showPassword,
+  toggleShowPassword,
+  required = false,
+}) {
+  return (
+    <div>
+      <label className="happy-label">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      <div className="relative">
+        <input
+          required={required}
+          type={showPassword ? 'text' : 'password'}
+          value={value}
+          onChange={onChange}
+          className="happy-input pr-12"
+          placeholder={`Enter ${label.toLowerCase()}`}
+        />
+        <button
+          type="button"
+          onClick={toggleShowPassword}
+          className="absolute inset-y-0 right-0 flex items-center px-4 text-fuchsia-400 transition-colors hover:text-fuchsia-600"
+        >
+          {showPassword ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+    </div>
+  )
+})
+
+// Tag Suggestions Component - Memoized
+const TagSuggestions = memo(function TagSuggestions({
+  currentTagInput,
+  suggestions,
+  onSelect,
+}) {
+  if (!currentTagInput || suggestions.length === 0) return null
+
+  // Only compute filtered suggestions if we have input and suggestions
+  const filteredSuggestions = suggestions.filter((tag) =>
+    tag.toLowerCase().includes(currentTagInput.toLowerCase())
+  )
+
+  if (filteredSuggestions.length === 0) return null
+
+  return (
+    <div className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-3xl border border-white/70 bg-white/90 shadow-xl backdrop-blur-xl">
+      {filteredSuggestions.map((tag, index) => (
+        <button
+          key={index}
+          type="button"
+          onClick={() => onSelect(tag)}
+          className="w-full px-4 py-3 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-fuchsia-50 focus:outline-none focus:bg-fuchsia-50"
+        >
+          {tag}
+        </button>
+      ))}
+    </div>
+  )
+})
+
+// Dialog Component
+const FacebookAccountDialog = memo(function FacebookAccountDialog({
+  isOpen,
+  onClose,
+  account,
+  onSubmit,
+}) {
+  // Single form data state
+  const [formData, setFormData] = useState(() => ({
+    userId: '',
+    password: '',
+    email: '',
+    emailPassword: '',
+    recoveryEmail: '',
+    twoFASecret: '',
+    dob: '',
+    tags: '',
+    showPassword: false,
+    showEmailPassword: false,
+    currentTagInput: '',
+    id: null,
+  }))
+
+  // Update form data when account changes
+  useEffect(() => {
+    if (account) {
+      setFormData({
+        userId: account.userId || '',
+        password: account.password || '',
+        email: account.email || '',
+        emailPassword: account.emailPassword || '',
+        recoveryEmail: account.recoveryEmail || '',
+        twoFASecret: account.twoFASecret || '',
+        dob: account.dob ? account.dob.split('T')[0] : '',
+        tags: account.tags || '',
+        showPassword: false,
+        showEmailPassword: false,
+        currentTagInput: '',
+        id: account.id,
+      })
+    } else {
+      // Reset form when adding a new account
+      setFormData({
+        userId: '',
+        password: '',
+        email: '',
+        emailPassword: '',
+        recoveryEmail: '',
+        twoFASecret: '',
+        dob: '',
+        tags: '',
+        showPassword: false,
+        showEmailPassword: false,
+        currentTagInput: '',
+        id: null,
+      })
+    }
+  }, [account])
+
+  // Tag suggestions state
+  const [tagSuggestions, setTagSuggestions] = useState([])
+  const tagInputRef = useRef(null)
+
+  // Update field function
+  const updateField = useCallback((field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+  }, [])
+
+  // Toggle password visibility
+  const togglePasswordVisibility = useCallback((field) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }))
+  }, [])
+
+  // Tag handlers
+  const handleTagInputChange = useCallback(
+    (e) => {
+      const value = e.target.value
+      updateField('tags', value)
+
+      const tagsArray = value.split(',')
+      const currentInput = tagsArray[tagsArray.length - 1].trim()
+      updateField('currentTagInput', currentInput)
+    },
+    [updateField]
+  )
+
+  const handleTagSelection = useCallback(
+    (tag) => {
+      const currentTags = formData.tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+      currentTags.pop() // Remove the last (incomplete) tag
+      const newTags = [...currentTags, tag].join(', ')
+      setFormData((prev) => ({
+        ...prev,
+        tags: newTags + ', ',
+        currentTagInput: '',
+      }))
+      tagInputRef.current?.focus()
+    },
+    [formData.tags]
+  )
+
+  // Fetch tag suggestions
+  const fetchTagSuggestions = useCallback(async () => {
+    try {
+      const response = await fetch('/api/facebook-accounts?getTags=true')
+      if (!response.ok) throw new Error('Failed to fetch tags')
+      const tags = await response.json()
+      setTagSuggestions(tags)
+    } catch (error) {
+      console.error('Error fetching tag suggestions:', error)
+    }
+  }, [])
+
+  // Form submission handler
+  const handleSubmit = useCallback(
+    (e) => {
+      e.preventDefault()
+
+      const accountData = {
+        userId: formData.userId,
+        password: formData.password,
+        email: formData.email,
+        emailPassword: formData.emailPassword,
+        recoveryEmail: formData.recoveryEmail,
+        twoFASecret: formData.twoFASecret,
+        tags: formData.tags,
+        dob: formData.dob || null,
+      }
+
+      if (formData.id) {
+        accountData.id = formData.id
+      }
+
+      onSubmit(accountData)
+    },
+    [formData, onSubmit]
+  )
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="happy-card w-full max-w-xl overflow-hidden border-white/70 bg-white/90 shadow-2xl">
+        <div className="relative px-6 py-8">
+          <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-fuchsia-200/50 blur-3xl"></div>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold text-slate-800">
+                {account ? 'Update this account' : 'Add a joyful account'}
+              </h2>
+              <p className="mt-2 text-sm text-slate-500">
+                Keep credentials sparkling clean with tags, secrets, and 2FA.
+              </p>
+            </div>
+            <button onClick={onClose} className="happy-button-ghost">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <FormInput
+              label="User ID"
+              value={formData.userId}
+              onChange={(e) => updateField('userId', e.target.value)}
+              placeholder="Enter user ID"
+              required
+            />
+
+            <PasswordInput
+              label="Password"
+              value={formData.password}
+              onChange={(e) => updateField('password', e.target.value)}
+              showPassword={formData.showPassword}
+              toggleShowPassword={() => togglePasswordVisibility('showPassword')}
+              required
+            />
+
+            <FormInput
+              label="Email"
+              value={formData.email}
+              onChange={(e) => updateField('email', e.target.value)}
+              type="email"
+              placeholder="Enter email (optional)"
+            />
+
+            <PasswordInput
+              label="Email Password"
+              value={formData.emailPassword}
+              onChange={(e) => updateField('emailPassword', e.target.value)}
+              showPassword={formData.showEmailPassword}
+              toggleShowPassword={() =>
+                togglePasswordVisibility('showEmailPassword')
+              }
+            />
+
+            <FormInput
+              label="Recovery Email"
+              value={formData.recoveryEmail}
+              onChange={(e) => updateField('recoveryEmail', e.target.value)}
+              type="email"
+              placeholder="Enter recovery email (optional)"
+            />
+
+            <FormInput
+              label="2FA Secret"
+              value={formData.twoFASecret}
+              onChange={(e) => updateField('twoFASecret', e.target.value)}
+              placeholder="Enter 2FA secret (optional)"
+            />
+
+            <div className="relative">
+              <label className="happy-label">Tags</label>
+              <input
+                ref={tagInputRef}
+                value={formData.tags}
+                onChange={handleTagInputChange}
+                className="happy-input"
+                placeholder="Enter tags, separated by commas"
+                onFocus={fetchTagSuggestions}
+              />
+              <TagSuggestions
+                currentTagInput={formData.currentTagInput}
+                suggestions={tagSuggestions}
+                onSelect={handleTagSelection}
+              />
+            </div>
+
+            <FormInput
+              label="Date of Birth"
+              value={formData.dob}
+              onChange={(e) => updateField('dob', e.target.value)}
+              type="date"
+            />
+
+            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-white/60 pt-5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="happy-button-secondary"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="happy-button-primary">
+                {account ? 'Save sparkle' : 'Add account'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+// Custom Draggable Facebook Accounts List Component
+const DraggableFacebookAccountsList = memo(function DraggableFacebookAccountsList() {
+  const {
+    searchType,
+    setSearchType,
+    searchTerm,
+    setSearchTerm,
+    loading,
+    error,
+    handleExportAll,
+    filteredAndSortedResources,
+    config,
+    fetchResources,
+  } = useResource()
+
+  // Tag Replace UI state and helpers
+  const [fromTag, setFromTag] = useState('')
+  const [toTag, setToTag] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+  const [candidates, setCandidates] = useState([])
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const currentCandidate = candidates[currentIndex]
+
+  const replaceTokens = useCallback((tagsString, from, to) => {
+    const tokens = String(tagsString || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+    return tokens.map((t) => (t === from ? to : t)).join(', ')
+  }, [])
+
+  const handleReplaceAll = useCallback(async () => {
+    if (!fromTag || !toTag) {
+      setMessage('Please provide both tags.')
+      return
+    }
+    try {
+      setBusy(true)
+      setMessage('')
+      const res = await fetch('/api/facebook-accounts/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromTag: fromTag.trim(), toTag: toTag.trim() }),
+      })
+      if (!res.ok) throw new Error('Replace failed')
+      const data = await res.json()
+      setMessage(`Matched ${data.matched}, updated ${data.updated}.`)
+      await fetchResources()
+    } catch (e) {
+      console.error(e)
+      setMessage('Failed to replace tags.')
+    } finally {
+      setBusy(false)
+    }
+  }, [fromTag, toTag, fetchResources])
+
+  const handleStartReview = useCallback(async () => {
+    if (!fromTag || !toTag) {
+      setMessage('Please provide both tags to review.')
+      return
+    }
+    try {
+      setBusy(true)
+      setMessage('')
+      const res = await fetch(`/api/facebook-accounts/tags?from=${encodeURIComponent(fromTag.trim())}`)
+      if (!res.ok) throw new Error('Failed to load candidates')
+      const data = await res.json()
+      setCandidates(data.candidates || [])
+      setCurrentIndex(0)
+      setReviewing(true)
+    } catch (e) {
+      console.error(e)
+      setMessage('Failed to load candidates.')
+    } finally {
+      setBusy(false)
+    }
+  }, [fromTag, toTag])
+
+  const handleReplaceCurrent = useCallback(async () => {
+    const c = currentCandidate
+    if (!c) return
+    try {
+      setBusy(true)
+      const newTags = replaceTokens(c.tags, fromTag.trim(), toTag.trim())
+      const res = await fetch('/api/facebook-accounts/tags', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, tags: newTags }),
+      })
+      if (!res.ok) throw new Error('Update failed')
+      if (currentIndex + 1 >= candidates.length) {
+        setMessage('Review complete.')
+        setReviewing(false)
+        setCandidates([])
+        await fetchResources()
+      } else {
+        setCurrentIndex((i) => i + 1)
+      }
+    } catch (e) {
+      console.error(e)
+      setMessage('Failed to update current item.')
+    } finally {
+      setBusy(false)
+    }
+  }, [currentCandidate, fromTag, toTag, currentIndex, candidates.length, replaceTokens, fetchResources])
+
+  const handleReplaceAllRemaining = useCallback(async () => {
+    try {
+      setBusy(true)
+      const remaining = candidates.slice(currentIndex)
+      for (const c of remaining) {
+        const newTags = replaceTokens(c.tags, fromTag.trim(), toTag.trim())
+        await fetch('/api/facebook-accounts/tags', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: c.id, tags: newTags }),
+        })
+      }
+      setMessage('Updated remaining candidates.')
+      setReviewing(false)
+      setCandidates([])
+      await fetchResources()
+    } catch (e) {
+      console.error(e)
+      setMessage('Failed to update remaining candidates.')
+    } finally {
+      setBusy(false)
+    }
+  }, [candidates, currentIndex, fromTag, toTag, replaceTokens, fetchResources])
+
+  // Dialog state (moved inside ResourceProvider context)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingAccount, setEditingAccount] = useState(null)
+
+  // Open dialog
+  const openDialog = useCallback((account = null) => {
+    setEditingAccount(account)
+    setDialogOpen(true)
+    document.body.style.overflow = 'hidden'
+  }, [])
+
+  // Close dialog
+  const closeDialog = useCallback(() => {
+    setDialogOpen(false)
+    setEditingAccount(null)
+    document.body.style.overflow = 'auto'
+  }, [])
+
+  // Form submission handler (now has access to fetchResources)
+  const handleSubmit = useCallback(
+    async (accountData) => {
+      try {
+        const method = editingAccount ? 'PUT' : 'POST'
+        const response = await fetch('/api/facebook-accounts', {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(accountData),
+        })
+
+        if (!response.ok) throw new Error('Failed to save account')
+
+        closeDialog()
+        // Refresh the resource list to show updated data
+        await fetchResources()
+      } catch (error) {
+        console.error('Error saving account:', error)
+        alert('Failed to save account')
+      }
+    },
+    [editingAccount, closeDialog, fetchResources]
+  )
+
+  // Simple drag state
+  const [draggedItemId, setDraggedItemId] = useState(null)
+  const [draggedOverId, setDraggedOverId] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [reorderedItems, setReorderedItems] = useState([])
+
+  // Initialize reordered items with current resources
+  useEffect(() => {
+    setReorderedItems(filteredAndSortedResources)
+  }, [filteredAndSortedResources])
+
+  // Handle drag start
+  const handleDragStart = useCallback((e, account) => {
+    setDraggedItemId(account.id)
+    setIsDragging(true)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', '')
+  }, [])
+
+  // Handle drag over
+  const handleDragOver = useCallback((e, targetAccount) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    
+    if (!draggedItemId || draggedItemId === targetAccount.id) return
+
+    setDraggedOverId(targetAccount.id)
+
+    // Find current positions
+    const draggedIndex = reorderedItems.findIndex(acc => acc.id === draggedItemId)
+    const targetIndex = reorderedItems.findIndex(acc => acc.id === targetAccount.id)
+
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return
+
+    // Create new array with reordered items
+    const newItems = [...reorderedItems]
+    const [draggedItem] = newItems.splice(draggedIndex, 1)
+    newItems.splice(targetIndex, 0, draggedItem)
+
+    setReorderedItems(newItems)
+  }, [draggedItemId, reorderedItems])
+
+  // Handle drag enter  
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault()
+  }, [])
+
+  // Handle drag leave
+  const handleDragLeave = useCallback((e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDraggedOverId(null)
+    }
+  }, [])
+
+  // Handle drop
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault()
+    
+    if (!draggedItemId) {
+      setDraggedItemId(null)
+      setDraggedOverId(null)
+      setIsDragging(false)
+      return
+    }
+
+    try {
+      // Send reorder request to API with current reordered items
+      const response = await fetch(config.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'reorder',
+          accounts: reorderedItems.map(acc => ({ id: acc.id }))
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to reorder accounts')
+      }
+
+      // Fetch fresh data from server to ensure proper order
+      await fetchResources()
+    } catch (error) {
+      console.error('Error reordering accounts:', error)
+      // Revert to original order on error
+      setReorderedItems(filteredAndSortedResources)
+    }
+
+    // Cleanup
+    setDraggedItemId(null)
+    setDraggedOverId(null)
+    setIsDragging(false)
+  }, [draggedItemId, reorderedItems, config.apiEndpoint, fetchResources, filteredAndSortedResources])
+
+  // Handle drag end - cleanup
+  const handleDragEnd = useCallback(() => {
+    setDraggedItemId(null)
+    setDraggedOverId(null)
+    setIsDragging(false)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="happy-card mx-auto max-w-md px-8 py-12 text-center animate-floaty">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-400 via-purple-400 to-indigo-400 text-white shadow-lg">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-white"></div>
+        </div>
+        <p className="mt-6 text-lg font-semibold text-slate-700">
+          Loading {config.resourceNamePlural.toLowerCase()}...
+        </p>
+        <p className="mt-2 text-sm text-slate-500">
+          Warming up your sparkling vault. One moment please!
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-10">
+      {/* Tag Replace Bar */}
+      <div className="happy-card p-6">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end">
+          <div className="flex-1 space-y-2">
+            <label className="happy-label">Find tag</label>
+            <input
+              value={fromTag}
+              onChange={(e) => setFromTag(e.target.value)}
+              className="happy-input"
+              placeholder="e.g. Jayesh"
+            />
+          </div>
+          <div className="flex-1 space-y-2">
+            <label className="happy-label">Replace with</label>
+            <input
+              value={toTag}
+              onChange={(e) => setToTag(e.target.value)}
+              className="happy-input"
+              placeholder="e.g. Aminesh"
+            />
+          </div>
+          <div className="flex gap-3 md:ml-auto">
+            <button
+              onClick={handleReplaceAll}
+              disabled={busy || !fromTag || !toTag}
+              className="happy-button-primary disabled:opacity-70 disabled:grayscale"
+            >
+              Replace all
+            </button>
+            <button
+              onClick={handleStartReview}
+              disabled={busy || !fromTag || !toTag}
+              className="happy-button-secondary disabled:opacity-50"
+            >
+              Review one by one
+            </button>
+          </div>
+        </div>
+        {message && (
+          <p className="mt-4 text-sm font-medium text-slate-500">{message}</p>
+        )}
+      </div>
+
+      {reviewing && currentCandidate && (
+        <div className="happy-card p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h4 className="text-lg font-semibold text-slate-700">
+              Review {currentIndex + 1} of {candidates.length}
+            </h4>
+            <button
+              className="happy-button-ghost text-sm"
+              onClick={() => {
+                setReviewing(false)
+                setCandidates([])
+              }}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
+          <div className="space-y-2 text-sm text-slate-600">
+            <div>
+              <span className="font-medium text-slate-500">User:</span>{' '}
+              {currentCandidate.userId}
+            </div>
+            <div>
+              <span className="font-medium text-slate-500">Current tags:</span>{' '}
+              {currentCandidate.tags || '(none)'}
+            </div>
+            <div>
+              <span className="font-medium text-slate-500">After replace:</span>{' '}
+              <span className="happy-tag bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400 text-white shadow-none">
+                {replaceTokens(currentCandidate.tags, fromTag, toTag)}
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={handleReplaceCurrent}
+              disabled={busy}
+              className="happy-button-primary disabled:opacity-70 disabled:grayscale"
+            >
+              Replace
+            </button>
+            <button
+              onClick={() => {
+                if (currentIndex + 1 >= candidates.length) {
+                  setMessage('Review complete.')
+                  setReviewing(false)
+                  setCandidates([])
+                } else {
+                  setCurrentIndex((i) => i + 1)
+                }
+              }}
+              disabled={busy}
+              className="happy-button-secondary disabled:opacity-50"
+            >
+              Skip
+            </button>
+            <button
+              onClick={handleReplaceAllRemaining}
+              disabled={busy}
+              className="happy-button-secondary disabled:opacity-50"
+            >
+              Replace All Remaining
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Header Controls */}
+      <div className="happy-card flex w-full flex-col gap-6 rounded-[2rem] p-6 sm:flex-row sm:items-center sm:justify-between">
+        {/* Add & Export Buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => openDialog()}
+            className="happy-button-primary flex flex-1 items-center justify-center gap-2 md:flex-none"
+          >
+            <Plus className="h-4 w-4" /> Add {config.resourceName}
+          </button>
+
+          <button
+            onClick={handleExportAll}
+            disabled={reorderedItems.length === 0}
+            className="happy-button-secondary flex flex-1 items-center justify-center gap-2 disabled:opacity-50 md:flex-none"
+          >
+            <FileText className="h-4 w-4" /> Export All
+          </button>
+        </div>
+
+        {/* Search Controls */}
+        <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row">
+          <select
+            value={searchType}
+            onChange={(e) => setSearchType(e.target.value)}
+            className="happy-input cursor-pointer bg-white"
+          >
+            {config.searchableFields.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="relative">
+            <input
+              type="text"
+              placeholder={`Search ${config.resourceNamePlural.toLowerCase()}...`}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="happy-input w-full pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* Error State */}
+      {error && (
+        <div className="happy-card border border-rose-200 bg-rose-50/80 p-6 text-rose-600 shadow-none">
+          <span className="block font-medium">{error}</span>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!error && reorderedItems.length === 0 && (
+        <div className="happy-card p-12 text-center">
+          <div className="mb-6 text-6xl">📱</div>
+          <h3 className="mb-2 text-2xl font-semibold text-slate-700">
+            No {config.resourceNamePlural.toLowerCase()} found
+          </h3>
+          <p className="mb-6 text-slate-500">
+            {searchTerm
+              ? `No ${config.resourceNamePlural.toLowerCase()} match your search.`
+              : `You haven't added any ${config.resourceNamePlural.toLowerCase()} yet.`}
+          </p>
+          <button
+            onClick={() => openDialog()}
+            className="happy-button-primary"
+          >
+            Add {config.resourceName}
+          </button>
+        </div>
+      )}
+
+      {/* Draggable Resources Grid */}
+      <div className="grid grid-cols-1 gap-6">
+        {reorderedItems.map((account) => (
+          <DraggableAccountCard
+            key={account.id}
+            account={account}
+            isDragging={isDragging && draggedItemId === account.id}
+            isDraggedOver={draggedOverId === account.id}
+            onDragStart={(e) => handleDragStart(e, account)}
+            onDragOver={(e) => handleDragOver(e, account)}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+            onEdit={(account) => openDialog(account)}
+          />
+        ))}
+      </div>
+
+      {/* Custom Dialog for Adding/Editing Facebook Accounts */}
+      <FacebookAccountDialog
+        isOpen={dialogOpen}
+        onClose={closeDialog}
+        account={editingAccount}
+        onSubmit={handleSubmit}
+      />
+    </div>
+  )
+})
+
+// Draggable Account Card Component  
+const DraggableAccountCard = memo(function DraggableAccountCard({
+  account,
+  isDragging,
+  isDraggedOver,
+  onDragStart,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  onEdit
+}) {
+  const {
+    openMenuId,
+    setOpenMenuId,
+    handleExportResource,
+    handleDelete,
+    hiddenFields,
+    toggleFieldVisibility,
+    handleCopy,
+    copiedField,
+    config,
+  } = useResource()
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`
+        happy-card relative cursor-grab border-white/60 bg-white/90 transition-all duration-300 active:cursor-grabbing
+        ${isDraggedOver ? 'ring-4 ring-fuchsia-200 ring-offset-4 scale-[1.01]' : ''}
+        ${isDragging ? 'scale-95 opacity-40' : ''}
+      `}
+    >
+      {/* Drag Handle */}
+      <div className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-white/80 p-2 text-slate-400 shadow-sm transition-colors hover:text-fuchsia-500">
+        <GripVertical className="h-5 w-5" />
+      </div>
+
+      {/* Resource Menu */}
+      <div className="absolute right-4 top-4 z-10">
+        <button
+          onClick={() =>
+            setOpenMenuId(openMenuId === account.id ? null : account.id)
+          }
+          className="happy-button-ghost"
+        >
+          <MoreVertical className="h-4 w-4 text-slate-500" />
+        </button>
+
+        {openMenuId === account.id && (
+          <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/60 bg-white/90 p-2 shadow-xl backdrop-blur-xl">
+            <button
+              onClick={() => onEdit(account)}
+              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-fuchsia-50"
+            >
+              <Edit className="h-4 w-4 text-fuchsia-500" /> Edit {config.resourceName}
+            </button>
+            <button
+              onClick={() => handleExportResource(account)}
+              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-emerald-50"
+            >
+              <FileText className="h-4 w-4 text-emerald-500" /> Export {config.resourceName}
+            </button>
+            <button
+              onClick={() => handleDelete(account.id)}
+              className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50"
+            >
+              <Trash className="h-4 w-4 text-rose-500" /> Delete {config.resourceName}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="px-6 pb-6 pt-8 md:pl-16">
+        {/* Account Details */}
+        <div className="overflow-hidden space-y-4 pr-6 sm:pr-12">
+          {config.renderResourceContent(account, {
+            hiddenFields,
+            toggleFieldVisibility,
+            handleCopy,
+            copiedField,
+          })}
+        </div>
+      </div>
+    </div>
+  )
+})
+
+export function FacebookAccountManagerContainer() {
+
+  // Resource configuration for provider
+  const resourceConfig = useMemo(
+    () => ({
+      apiEndpoint: '/api/facebook-accounts',
+      resourceName: 'Account',
+      resourceNamePlural: 'Accounts',
+      idField: 'id',
+      searchableFields: [
+        { value: 'userId', label: 'User ID' },
+        { value: 'email', label: 'Email' },
+        { value: 'tags', label: 'Tags' },
+        { value: 'password', label: 'Password' },
+      ],
+      requiredFields: ['userId', 'password'], // twoFASecret no longer required
+
+      // Custom function to get the search field value based on the search type
+      getSearchField: (account, searchType) => {
+        if (searchType === 'email') {
+          return String(account.email || '')
+        } else if (searchType === 'password') {
+          return String(account.password || '')
+        } else if (searchType === 'tags') {
+          return String(account.tags || '')
+        } else {
+          return String(account.userId || '')
+        }
+      },
+
+      // Custom search logic for flexible tag matching
+      customFilter: (account, searchTerm, searchType) => {
+        if (searchType === 'tags' && searchTerm.trim()) {
+          const accountTags = (account.tags || '').toLowerCase()
+          const searchTerms = searchTerm.toLowerCase()
+            .split(',')
+            .map(term => term.trim())
+            .filter(term => term.length > 0)
+
+          // Check if ALL search terms are present in the account tags (in any order)
+          return searchTerms.every(searchTag => 
+            accountTags.includes(searchTag)
+          )
+        }
+        
+        // For non-tag searches, use the default logic
+        const searchField = searchType === 'email'
+          ? account.email || ''
+          : searchType === 'password'
+            ? account.password || ''
+            : searchType === 'tags'
+              ? account.tags || ''
+              : account.userId || ''
+
+        return String(searchField).toLowerCase().includes(searchTerm.toLowerCase())
+      },
+
+
+      // Generate export filename
+      getExportFilename: (account) => {
+        const safeUserId = (account.userId?.toString() || 'account')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+        return `facebook-account-${safeUserId}.txt`
+      },
+
+      // Render the content of each resource card
+      renderResourceContent: (
+        account,
+        { hiddenFields, toggleFieldVisibility, handleCopy, copiedField }
+      ) => {
+        return (
+          <>
+            {/* User ID */}
+            {renderField('User ID:', account.userId, {
+              copyable: true,
+              onCopy: handleCopy,
+              fieldId: `userid-${account.id}`,
+              copiedField,
+            })}
+
+            {/* Password */}
+            {renderPasswordField('Password:', account.password, {
+              isVisible: hiddenFields[`${account.id}-password`],
+              onToggleVisibility: () =>
+                toggleFieldVisibility(account.id, 'password'),
+              onCopy: handleCopy,
+              fieldId: `password-${account.id}`,
+              copiedField,
+            })}
+
+            {/* Email */}
+            {account.email &&
+              renderField('Email:', account.email, {
+                copyable: true,
+                onCopy: handleCopy,
+                fieldId: `email-${account.id}`,
+                copiedField,
+                className: 'break-all',
+              })}
+
+            {/* Email Password */}
+            {account.emailPassword &&
+              renderPasswordField('Email Password:', account.emailPassword, {
+                isVisible: hiddenFields[`${account.id}-emailPassword`],
+                onToggleVisibility: () =>
+                  toggleFieldVisibility(account.id, 'emailPassword'),
+                onCopy: handleCopy,
+                fieldId: `emailpass-${account.id}`,
+                copiedField,
+              })}
+
+            {/* Recovery Email */}
+            {account.recoveryEmail &&
+              renderField('Recovery Email:', account.recoveryEmail, {
+                copyable: true,
+                onCopy: handleCopy,
+                fieldId: `recoveryemail-${account.id}`,
+                copiedField,
+                className: 'break-all',
+              })}
+
+            {/* 2FA Code with Timer - only show if there's a 2FA secret */}
+            {account.twoFASecret && (
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-slate-600">2FA Code:</span>
+                <div className="flex items-center gap-2">
+                  <TOTPTimer secret={account.twoFASecret} />
+                  <button
+                    onClick={() =>
+                      handleCopy(
+                        generate2FACode(account.twoFASecret),
+                        `2fa-${account.id}`
+                      )
+                    }
+                    className={`happy-button-ghost h-10 w-10 justify-center rounded-full ${
+                      copiedField === `2fa-${account.id}`
+                        ? 'text-emerald-500'
+                        : 'text-fuchsia-400'
+                    }`}
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {account.tags && account.tags.trim() !== '' && (
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-slate-600">Tags:</span>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {account.tags.split(',').map((tag, index) => (
+                    <span
+                      key={index}
+                      className="happy-tag"
+                    >
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Date of Birth */}
+            {account.dob &&
+              renderField(
+                'Date of Birth:',
+                new Date(account.dob).toLocaleDateString()
+              )}
+          </>
+        )
+      },
+    }),
+    []
+  )
+
+  return (
+    <ResourceProvider config={resourceConfig}>
+      <DraggableFacebookAccountsList />
+    </ResourceProvider>
+  )
+}
+
+export default FacebookAccountManagerContainer

@@ -1,0 +1,38 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  password      String
+  twoFAEnabled  Boolean   @default(false)
+  twoFASecret   String?
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model FacebookAccount {
+  id            Int      @id @default(autoincrement())
+  userId        String   @unique
+  password      String
+  email         String?
+  emailPassword String?
+  recoveryEmail String?
+  twoFASecret   String?
+  tags          String   @default("")
+  dob           String?  // Add this new field
+  order         Int      @default(0) // Add order field for drag and drop
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+
+

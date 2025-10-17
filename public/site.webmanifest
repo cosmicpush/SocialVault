@@ -1,0 +1,19 @@
+{
+    "theme_color":  "#ffffff",
+    "name":  "SocialVault",
+    "background_color":  "#ffffff",
+    "display":  "standalone",
+    "short_name":  "SocialVault",
+    "icons":  [
+                  {
+                      "type":  "image/png",
+                      "sizes":  "192x192",
+                      "src":  "/android-chrome-192x192.png"
+                  },
+                  {
+                      "type":  "image/png",
+                      "sizes":  "512x512",
+                      "src":  "/android-chrome-512x512.png"
+                  }
+              ]
+}

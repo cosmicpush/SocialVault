@@ -1,0 +1,198 @@
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 208 100% 97%;
+    --foreground: 217 33% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 33% 14%;
+
+    --primary: 259 94% 51%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 186 100% 93%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 200 45% 92%;
+    --muted-foreground: 215 19% 35%;
+
+    --accent: 329 92% 96%;
+    --accent-foreground: 325 86% 30%;
+
+    --destructive: 0 84% 63%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 40% 90%;
+    --input: 210 40% 90%;
+    --ring: 259 94% 51%;
+
+    --radius: 1.25rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 215 28% 17%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 215 28% 17%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 259 94% 51%;
+
+    --secondary: 222 47% 21%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 47% 24%;
+    --muted-foreground: 214 32% 74%;
+
+    --accent: 329 86% 55%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 47% 21%;
+    --input: 222 47% 21%;
+    --ring: 259 94% 51%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+body {
+  @apply min-h-screen bg-gradient-to-br from-amber-50 via-white to-sky-50 text-slate-800;
+  background-attachment: fixed;
+}
+
+.font-cursive {
+  font-family: 'Dancing Script', cursive;
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes sparkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@layer components {
+  .happy-container {
+    @apply relative mx-auto w-full max-w-6xl px-6 py-12 md:py-16 lg:px-8;
+  }
+
+  .happy-card {
+    @apply bg-white/80 backdrop-blur-2xl border border-white/60 shadow-lg rounded-[2rem] transition-all duration-500;
+  }
+
+  .happy-card:hover {
+    @apply -translate-y-2 shadow-2xl;
+  }
+
+  .happy-card-muted {
+    @apply bg-white/70 backdrop-blur-xl border border-white/50 rounded-3xl shadow-md transition-all;
+  }
+
+  .happy-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-6 py-3 font-semibold text-white shadow-lg shadow-fuchsia-200 transition-all duration-300 hover:shadow-xl hover:shadow-fuchsia-300 hover:-translate-y-1;
+    background-size: 200% 200%;
+    animation: gradientShift 8s ease infinite;
+  }
+
+  .happy-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-transparent bg-white/80 px-6 py-3 font-semibold text-slate-700 shadow-md transition-all duration-300 hover:border-fuchsia-200 hover:text-fuchsia-600 hover:-translate-y-1;
+  }
+
+  .happy-button-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-transparent px-4 py-2 text-slate-600 transition-colors hover:text-fuchsia-500 hover:border-fuchsia-200;
+  }
+
+  .happy-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-5 py-2 text-white font-semibold shadow-md transition-all hover:-translate-y-1 hover:shadow-lg;
+  }
+
+  .happy-input {
+    @apply w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-slate-700 shadow-sm transition-all duration-300 focus:border-fuchsia-200 focus:ring-4 focus:ring-fuchsia-100 outline-none;
+  }
+
+  .happy-label {
+    @apply text-sm font-semibold text-slate-600 mb-1 inline-flex items-center gap-1;
+  }
+
+  .happy-tag {
+    @apply rounded-full bg-gradient-to-r from-sky-400 via-blue-400 to-violet-400 px-3 py-1 text-xs font-semibold text-white shadow-md;
+  }
+}
+
+@layer utilities {
+  .animate-floaty {
+    animation: floaty 12s ease-in-out infinite;
+  }
+
+  .animate-sway {
+    animation: sway 10s ease-in-out infinite;
+  }
+
+  .animate-sparkle {
+    animation: sparkle 7s ease-in-out infinite;
+  }
+
+  .animate-gradient {
+    animation: gradientShift 14s ease infinite;
+    background-size: 200% 200%;
+  }
+}
