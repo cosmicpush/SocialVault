@@ -31,13 +31,13 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
         run: |
-          ssh "${SSH_USERNAME}@${SSH_HOST}" <<'EOF'
+          ssh "${SSH_USERNAME}@${SSH_HOST}" "
             set -euo pipefail
-            cd "${REMOTE_PATH}"
+            cd '${REMOTE_PATH}'
             git pull
             npm run clean
             npm install --no-progress --prefer-offline
             npx prisma db push
             npm run build
             pm2 reload bharatiyanews
-EOF
+          "
