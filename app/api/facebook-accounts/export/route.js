@@ -6,6 +6,9 @@ export async function GET() {
   try {
     const accounts = await prisma.facebookAccount.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        group: true, // Include group data for export
+      },
     })
 
     const content = prepareForExport(accounts)

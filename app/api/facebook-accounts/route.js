@@ -46,13 +46,17 @@ export async function GET(req) {
     console.log('Fetching Facebook accounts...')
     const accounts = await prisma.facebookAccount.findMany({
       where: groupIdFilter ? { groupId: groupIdFilter } : undefined,
-      orderBy: { order: 'asc' }
+      orderBy: { order: 'asc' },
+      include: {
+        group: true, // Include group data
+      },
     })
     console.log(`Successfully fetched ${accounts.length} accounts`)
 
-    const decryptedAccounts = accounts.map((account) =>
-      decryptFacebookAccount(account)
-    )
+    const decryptedAccounts = accounts.map((account) => ({
+      ...decryptFacebookAccount(account),
+      group: account.group, // Preserve group data after decryption
+    }))
 
     return new Response(JSON.stringify(decryptedAccounts), {
       headers: { 'Content-Type': 'application/json' },
@@ -236,6 +240,9 @@ export async function PATCH(req) {
     const { format = 'text' } = await req.json()
     const accounts = await prisma.facebookAccount.findMany({
       orderBy: { order: 'asc' },
+      include: {
+        group: true, // Include group data for export
+      },
     })
 
     const content = prepareForExport(accounts, format)

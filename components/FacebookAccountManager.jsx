@@ -410,7 +410,7 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
             <FormInput
               label="2FA Secret"
               value={formData.twoFASecret}
-              onChange={(e) => updateField('twoFASecret', e.target.value)}
+              onChange={(e) => updateField('twoFASecret', e.target.value.replace(/\s/g, ''))}
               placeholder="Enter 2FA secret (optional)"
             />
 
@@ -1533,12 +1533,19 @@ export function FacebookAccountManagerContainer() {
               </span>
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                 {account.tags.split(',').map((tag, index) => (
-                  <span
+                  <button
                     key={index}
-                    className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
+                    type="button"
+                    onClick={() => handleCopy(tag.trim(), `tag-${account.id}-${index}`)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                      copiedField === `tag-${account.id}-${index}`
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+                        : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-600'
+                    } cursor-pointer`}
+                    title="Click to copy tag"
                   >
                     {tag.trim()}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>

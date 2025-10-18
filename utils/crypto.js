@@ -125,42 +125,59 @@ export function prepareForExport(data, format = 'text') {
     return JSON.stringify(decryptedItems, null, 2)
   }
 
-  return decryptedItems
-    .map((item) => {
-      try {
-        if (isFacebookAccount) {
-          return [
-            `Account Details for ${item.userId}`,
-            '----------------------------------------',
-            `User ID: ${item.userId}`,
-            `Password: ${item.password}`,
-            item.email ? `Email: ${item.email}` : null,
-            item.emailPassword ? `Email Password: ${item.emailPassword}` : null,
-            item.recoveryEmail ? `Recovery Email: ${item.recoveryEmail}` : null,
-            `2FA Secret: ${item.twoFASecret}`,
-            item.tags ? `Tags: ${item.tags}` : null,
-            item.dob
-              ? `Date of Birth: ${new Date(item.dob).toLocaleDateString()}`
-              : null,
-            item.createdAt
-              ? `Created: ${new Date(item.createdAt).toLocaleString()}`
-              : null,
-            item.updatedAt
-              ? `Last Updated: ${new Date(item.updatedAt).toLocaleString()}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join('\n')
+  // New pipe-separated format
+  // Header: User ID|Password|Email|Email Password|2FA|DOB|Group|Tags|Created|Last Updated
+  const lines = []
+
+  // Add header
+  lines.push('User ID|Password|Email|Email Password|2FA|DOB|Group|Tags|Created|Last Updated')
+
+  // Add data rows
+  decryptedItems.forEach((item) => {
+    try {
+      if (isFacebookAccount) {
+        const formatDate = (date) => {
+          if (!date) return ''
+          const d = new Date(date)
+          const day = String(d.getDate()).padStart(2, '0')
+          const month = String(d.getMonth() + 1).padStart(2, '0')
+          const year = d.getFullYear()
+          const hours = String(d.getHours()).padStart(2, '0')
+          const minutes = String(d.getMinutes()).padStart(2, '0')
+          const seconds = String(d.getSeconds()).padStart(2, '0')
+          return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`
         }
 
-        // This is the fallback case for other types
-        return JSON.stringify(item, null, 2)
-      } catch (error) {
-        console.error('Error formatting item for export:', error)
-        return `Error: Failed to format item ${item.id || 'unknown'}`
+        const formatDOB = (date) => {
+          if (!date) return ''
+          const d = new Date(date)
+          const day = String(d.getDate()).padStart(2, '0')
+          const month = String(d.getMonth() + 1).padStart(2, '0')
+          const year = d.getFullYear()
+          return `${day}/${month}/${year}`
+        }
+
+        const row = [
+          item.userId || '',
+          item.password || '',
+          item.email || '',
+          item.emailPassword || '',
+          item.twoFASecret || '',
+          item.dob ? formatDOB(item.dob) : '',
+          item.group?.name || '',
+          item.tags || '',
+          item.createdAt ? formatDate(item.createdAt) : '',
+          item.updatedAt ? formatDate(item.updatedAt) : '',
+        ].join('|')
+
+        lines.push(row)
       }
-    })
-    .join('\n\n')
+    } catch (error) {
+      console.error('Error formatting item for export:', error)
+    }
+  })
+
+  return lines.join('\n')
 }
 
 export async function copyToClipboardSecurely(text) {
