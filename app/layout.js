@@ -8,6 +8,12 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata = {
   title: 'SocialVault',
   description: 'Personal Account Manager',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
   robots: {
     index: false,
     follow: false,
@@ -71,15 +77,15 @@ export default function RootLayout({ children }) {
       <body
         className={`${inter.className} relative min-h-screen overflow-x-hidden bg-transparent`}
       >
-        <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
           <div className="absolute -left-20 top-10 h-80 w-80 rounded-full bg-fuchsia-200/50 blur-3xl animate-floaty"></div>
-          <div className="absolute right-[-6rem] top-40 h-[26rem] w-[26rem] rounded-full bg-sky-200/60 blur-3xl animate-sway"></div>
-          <div className="absolute left-1/2 top-1/4 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-amber-100/70 blur-[140px] animate-sparkle"></div>
-          <div className="absolute bottom-[-8rem] left-10 h-[22rem] w-[22rem] rounded-full bg-violet-200/40 blur-3xl animate-floaty"></div>
+          <div className="absolute -right-20 top-40 h-96 w-96 rounded-full bg-sky-200/60 blur-3xl animate-sway"></div>
+          <div className="absolute left-1/2 top-1/4 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-100/70 blur-[140px] animate-sparkle"></div>
+          <div className="absolute -bottom-20 left-10 h-80 w-80 rounded-full bg-violet-200/40 blur-3xl animate-floaty"></div>
         </div>
-        <div className="relative z-10 flex min-h-screen flex-col">
+        <div className="relative z-10 flex min-h-screen w-full flex-col overflow-x-hidden">
           <Header />
-          <main className="flex-grow">{children}</main>
+          <main className="flex-grow w-full">{children}</main>
           <Footer />
         </div>
       </body>

@@ -80,6 +80,14 @@
 body {
   @apply min-h-screen bg-gradient-to-br from-amber-50 via-white to-sky-50 text-slate-800;
   background-attachment: fixed;
+  width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .font-cursive {

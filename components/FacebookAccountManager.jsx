@@ -316,9 +316,10 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="happy-card w-full max-w-xl overflow-hidden border-white/70 bg-white/90 shadow-2xl">
-        <div className="relative px-6 py-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="happy-card my-8 w-full max-w-xl border-white/70 bg-white/90 shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]">
+        {/* Fixed Header */}
+        <div className="relative flex-shrink-0 border-b border-slate-100 px-6 py-6">
           <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-fuchsia-200/50 blur-3xl"></div>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -329,12 +330,15 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
                 Keep credentials sparkling clean with tags, secrets, and 2FA.
               </p>
             </div>
-            <button onClick={onClose} className="happy-button-ghost">
+            <button onClick={onClose} className="happy-button-ghost flex-shrink-0">
               <X className="h-5 w-5" />
             </button>
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <form onSubmit={handleSubmit} className="space-y-5" id="account-form">
             <div>
               <label className="happy-label">
                 Assign to group <span className="text-rose-500">*</span>
@@ -433,20 +437,27 @@ const FacebookAccountDialog = memo(function FacebookAccountDialog({
               onChange={(e) => updateField('dob', e.target.value)}
               type="date"
             />
-
-            <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-white/60 pt-5">
-              <button
-                type="button"
-                onClick={onClose}
-                className="happy-button-secondary"
-              >
-                Cancel
-              </button>
-              <button type="submit" className="happy-button-primary">
-                {account ? 'Save sparkle' : 'Add account'}
-              </button>
-            </div>
           </form>
+        </div>
+
+        {/* Fixed Footer with Buttons */}
+        <div className="flex-shrink-0 border-t border-slate-100 px-6 py-4">
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="happy-button-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="account-form"
+              className="happy-button-primary"
+            >
+              {account ? 'Save sparkle' : 'Add account'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1204,54 +1215,63 @@ const DraggableAccountCard = memo(function DraggableAccountCard({
         <GripVertical className="h-5 w-5" />
       </div>
 
-      {/* Resource Menu */}
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-        <label className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-fuchsia-500 focus:ring-fuchsia-200"
-            checked={isSelected}
-            onChange={() => onToggleSelect(account.id)}
-          />
-          <span>Select</span>
-        </label>
-        <div className="relative">
-          <button
-            onClick={() =>
-              setOpenMenuId(openMenuId === account.id ? null : account.id)
-            }
-            className="happy-button-ghost"
+      {/* Card Header with Select and Menu */}
+      <div className="border-b border-slate-100 px-6 py-4 md:pl-16">
+        <div className="flex items-center justify-end gap-3">
+          <label
+            className="flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50"
+            onClick={(e) => e.preventDefault()}
           >
-            <MoreVertical className="h-4 w-4 text-slate-500" />
-          </button>
-          {openMenuId === account.id && (
-            <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/60 bg-white/90 p-2 shadow-xl backdrop-blur-xl">
-              <button
-                onClick={() => onEdit(account)}
-                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-fuchsia-50"
-              >
-                <Edit className="h-4 w-4 text-fuchsia-500" /> Edit {config.resourceName}
-              </button>
-              <button
-                onClick={() => handleExportResource(account)}
-                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-emerald-50"
-              >
-                <FileText className="h-4 w-4 text-emerald-500" /> Export {config.resourceName}
-              </button>
-              <button
-                onClick={() => handleDelete(account.id)}
-                className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50"
-              >
-                <Trash className="h-4 w-4 text-rose-500" /> Delete {config.resourceName}
-              </button>
-            </div>
-          )}
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer rounded border-slate-300 text-fuchsia-500 focus:ring-2 focus:ring-fuchsia-200 focus:ring-offset-0"
+              checked={isSelected}
+              onChange={(e) => {
+                e.stopPropagation()
+                onToggleSelect(account.id)
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span>Select</span>
+          </label>
+          <div className="relative">
+            <button
+              onClick={() =>
+                setOpenMenuId(openMenuId === account.id ? null : account.id)
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-600"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {openMenuId === account.id && (
+              <div className="absolute right-0 z-50 mt-2 w-52 rounded-2xl border border-white/60 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                <button
+                  onClick={() => onEdit(account)}
+                  className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-fuchsia-50"
+                >
+                  <Edit className="h-4 w-4 text-fuchsia-500" /> Edit {config.resourceName}
+                </button>
+                <button
+                  onClick={() => handleExportResource(account)}
+                  className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-emerald-50"
+                >
+                  <FileText className="h-4 w-4 text-emerald-500" /> Export {config.resourceName}
+                </button>
+                <button
+                  onClick={() => handleDelete(account.id)}
+                  className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-50"
+                >
+                  <Trash className="h-4 w-4 text-rose-500" /> Delete {config.resourceName}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="px-6 pb-6 pt-8 md:pl-16">
+      <div className="px-6 pb-6 pt-6 md:pl-16">
         {/* Account Details */}
-        <div className="overflow-hidden space-y-4 pr-6 sm:pr-12">
+        <div className="space-y-4 pr-6 sm:pr-12">
           {config.renderResourceContent(account, {
             hiddenFields,
             toggleFieldVisibility,
@@ -1480,21 +1500,24 @@ export function FacebookAccountManagerContainer() {
               className: 'break-all',
             })}
           {account.twoFASecret && (
-            <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-600">2FA Code:</span>
-            <div className="flex items-center gap-3">
-              <TOTPTimer secret={account.twoFASecret} />
-              <button
-                onClick={() =>
-                  handleCopy(
-                    generate2FACode(account.twoFASecret),
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <span className="min-w-[140px] text-sm font-medium text-slate-600">
+                2FA Code:
+              </span>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                <TOTPTimer secret={account.twoFASecret} />
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopy(
+                      generate2FACode(account.twoFASecret),
                       `2fa-${account.id}`
                     )
                   }
-                  className={`happy-button-ghost h-10 w-10 justify-center rounded-full ${
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 transition-colors hover:bg-slate-100 ${
                     copiedField === `2fa-${account.id}`
                       ? 'text-emerald-500'
-                      : 'text-fuchsia-400'
+                      : 'text-slate-500'
                   }`}
                   title="Copy to clipboard"
                 >
@@ -1504,9 +1527,11 @@ export function FacebookAccountManagerContainer() {
             </div>
           )}
           {account.tags && account.tags.trim() !== '' && (
-            <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-600">Tags:</span>
-              <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <span className="min-w-[140px] text-sm font-medium text-slate-600">
+                Tags:
+              </span>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                 {account.tags.split(',').map((tag, index) => (
                   <span
                     key={index}
